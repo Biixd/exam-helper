@@ -18,7 +18,8 @@ import {
   onAuthStateChanged 
 } from 'firebase/auth';
 
-// --- Firebase Configuration Setup ---
+// --- การตั้งค่า Firebase ---
+// หากใช้งานบน Vercel/GitHub ให้ตรวจสอบว่าคุณได้เปลี่ยนค่าเหล่านี้เป็นของคุณจริงๆ ใน Firebase Console
 const firebaseConfig = typeof __firebase_config !== 'undefined' 
   ? JSON.parse(__firebase_config) 
   : {
@@ -33,10 +34,12 @@ const firebaseConfig = typeof __firebase_config !== 'undefined'
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'exam-helper-prod-v1';
 
-// CONFIG: รหัสผ่านสำหรับจัดการข้อมูล
-const ADMIN_PASSWORD = "testb1"; 
+// ใช้ App ID ตามที่ปรากฏใน GitHub ของคุณ
+const appId = typeof __app_id !== 'undefined' ? __app_id : 'exam-helper-upload-v1';
+
+// CONFIG: รหัสผ่านสำหรับจัดการข้อมูล (อัปเดตตามรูปภาพ GitHub)
+const ADMIN_PASSWORD = "billtest1122"; 
 
 const App = () => {
   const [user, setUser] = useState(null);
@@ -77,7 +80,7 @@ const App = () => {
 
   // 2. ดึงข้อมูลแบบ Real-time (Rule 1: Strict Paths & Rule 3: Guard with user)
   useEffect(() => {
-    if (!user) return; // ป้องกันการดึงข้อมูลก่อน login สำเร็จ
+    if (!user) return; 
 
     // ใช้ Path ตามกฎ Rule 1: /artifacts/{appId}/public/data/{collectionName}
     const subjectsCol = collection(db, 'artifacts', appId, 'public', 'data', 'subjects');
@@ -88,7 +91,6 @@ const App = () => {
       setSubjects(data);
       setLoading(false);
       
-      // อัปเดตข้อมูลวิชาที่เลือกอยู่ถ้ามีการเปลี่ยนแปลง
       if (selectedSubject) {
         const updated = data.find(s => s.id === selectedSubject.id);
         if (updated) setSelectedSubject(updated);
@@ -130,7 +132,6 @@ const App = () => {
     if (!isAdmin || !newSubjectName.trim() || !user) return;
     const id = Date.now().toString();
     try {
-      // Rule 1: Doc path
       await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'subjects', id), {
         name: newSubjectName,
         questions: []
@@ -197,7 +198,7 @@ const App = () => {
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] text-slate-900 font-sans pb-10">
-      {/* Header */}
+      {/* ส่วนหัว */}
       <motion.header className="bg-indigo-600 text-white p-5 sticky top-0 z-40 shadow-lg rounded-b-[2rem]">
         <div className="max-w-md mx-auto flex justify-between items-center">
           <div className="flex items-center gap-3">
@@ -295,7 +296,7 @@ const App = () => {
                       </p>
                       {q.imageData && (
                         <div className="mt-2 rounded-xl overflow-hidden border border-slate-200 bg-white">
-                          <img src={q.imageData} alt="Answer attachment" className="w-full h-auto object-contain max-h-[300px]" />
+                          <img src={q.imageData} alt="แนบรูปภาพคำตอบ" className="w-full h-auto object-contain max-h-[300px]" />
                         </div>
                       )}
                     </div>
@@ -307,7 +308,7 @@ const App = () => {
         </AnimatePresence>
       </main>
 
-      {/* Admin Login Modal */}
+      {/* หน้าต่างล็อกอินแอดมิน */}
       <AnimatePresence>
         {showAdminLogin && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-6">
@@ -327,7 +328,7 @@ const App = () => {
           </motion.div>
         )}
 
-        {/* Add Question Modal */}
+        {/* หน้าต่างเพิ่มคำถาม */}
         {isAddingQuestion && isAdmin && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 bg-slate-900/40 backdrop-blur-md z-50 flex items-end sm:items-center justify-center p-4">
             <motion.div initial={{ y: "100%" }} animate={{ y: 0 }} className="bg-white w-full max-w-md rounded-t-[2.5rem] sm:rounded-[2.5rem] p-8 shadow-2xl overflow-y-auto max-h-[90vh]">
@@ -380,6 +381,7 @@ const App = () => {
           </motion.div>
         )}
 
+        {/* หน้าต่างเพิ่มรายวิชา */}
         {isAddingSubject && isAdmin && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 bg-slate-900/40 backdrop-blur-md z-50 flex items-center justify-center p-6">
             <motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }} className="bg-white w-full max-w-xs rounded-[2.5rem] p-8 shadow-2xl">
@@ -394,7 +396,7 @@ const App = () => {
         )}
       </AnimatePresence>
 
-      {/* Admin Badge */}
+      {/* แถบสถานะแอดมิน */}
       <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-30 pointer-events-none">
         <div className={`px-4 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-widest border shadow-lg backdrop-blur-sm ${isAdmin ? 'bg-amber-100/90 border-amber-300 text-amber-700' : 'bg-white/90 border-slate-200 text-slate-400'}`}>
           {isAdmin ? 'ADMIN MODE - ข้อมูลอัปเดต Real-time' : 'VIEWER MODE - ระบบอัปเดตอัตโนมัติ'}
