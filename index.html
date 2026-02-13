@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Search, Plus, Trash2, BookOpen, HelpCircle, ChevronRight, X, ArrowLeft, Lock, Unlock, Key, Image as ImageIcon, Upload } from 'lucide-react';
+import { Search, Plus, Trash2, BookOpen, X, ArrowLeft, Lock, Unlock, Key, Upload } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { initializeApp } from 'firebase/app';
 import { 
@@ -14,21 +14,29 @@ import {
 import { 
   getAuth, 
   signInAnonymously, 
-  signInWithCustomToken, 
+  signInWithCustomToken,
   onAuthStateChanged 
 } from 'firebase/auth';
 
 // --- Firebase Configuration Setup ---
-const firebaseConfig = JSON.parse(__firebase_config);
+const firebaseConfig = typeof __firebase_config !== 'undefined' 
+  ? JSON.parse(__firebase_config) 
+  : {
+      apiKey: "YOUR_API_KEY",
+      authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+      projectId: "YOUR_PROJECT_ID",
+      storageBucket: "YOUR_PROJECT_ID.appspot.com",
+      messagingSenderId: "YOUR_SENDER_ID",
+      appId: "YOUR_APP_ID"
+    };
+
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'exam-helper-upload-v1';
+const appId = typeof __app_id !== 'undefined' ? __app_id : 'exam-helper-prod-v1';
 
-// **********************************************************
 // CONFIG: รหัสผ่านสำหรับจัดการข้อมูล
-// **********************************************************
-const ADMIN_PASSWORD = "billtest1122"; 
+const ADMIN_PASSWORD = "testb1"; 
 
 const App = () => {
   const [user, setUser] = useState(null);
@@ -47,7 +55,7 @@ const App = () => {
   const [newQuestion, setNewQuestion] = useState({ text: '', answer: '', imageData: '' });
   const fileInputRef = useRef(null);
 
-  // 1. Authentication Lifecycle
+  // 1. จัดการการเข้าสู่ระบบ (Rule 3: Auth Before Queries)
   useEffect(() => {
     const initAuth = async () => {
       try {
@@ -57,22 +65,22 @@ const App = () => {
           await signInAnonymously(auth);
         }
       } catch (err) {
-        console.error("Auth initialization failed:", err);
+        console.error("Auth failed:", err);
       }
     };
     initAuth();
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => setUser(currentUser));
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser);
+    });
     return () => unsubscribe();
   }, []);
 
-  // 2. Data Synchronization (Real-time)
+  // 2. ดึงข้อมูลแบบ Real-time (Rule 1: Strict Paths & Rule 3: Guard with user)
   useEffect(() => {
-    if (!user) return;
+    if (!user) return; // ป้องกันการดึงข้อมูลก่อน login สำเร็จ
 
-    // RULE 1: Use strictly defined path for public data
+    // ใช้ Path ตามกฎ Rule 1: /artifacts/{appId}/public/data/{collectionName}
     const subjectsCol = collection(db, 'artifacts', appId, 'public', 'data', 'subjects');
-    
-    // RULE 2: Simple query to avoid index requirement errors
     const q = query(subjectsCol);
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -80,7 +88,7 @@ const App = () => {
       setSubjects(data);
       setLoading(false);
       
-      // Update selected subject details if it's currently open
+      // อัปเดตข้อมูลวิชาที่เลือกอยู่ถ้ามีการเปลี่ยนแปลง
       if (selectedSubject) {
         const updated = data.find(s => s.id === selectedSubject.id);
         if (updated) setSelectedSubject(updated);
@@ -106,7 +114,7 @@ const App = () => {
   const handleImageUpload = (e) => {
     const file = e.target.files[0];
     if (file) {
-      if (file.size > 800000) { // Keep under 800KB for Firestore safe buffer
+      if (file.size > 800000) {
         alert("ขนาดรูปภาพใหญ่เกินไป (กรุณาใช้รูปไม่เกิน 800KB)");
         return;
       }
@@ -122,6 +130,7 @@ const App = () => {
     if (!isAdmin || !newSubjectName.trim() || !user) return;
     const id = Date.now().toString();
     try {
+      // Rule 1: Doc path
       await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'subjects', id), {
         name: newSubjectName,
         questions: []
@@ -146,7 +155,7 @@ const App = () => {
   };
 
   const addQuestion = async () => {
-    if (!isAdmin || !newQuestion.text.trim() || !newQuestion.answer.trim() || !user) return;
+    if (!isAdmin || !newQuestion.text.trim() || !newQuestion.answer.trim() || !user || !selectedSubject) return;
     try {
       const subjectDoc = doc(db, 'artifacts', appId, 'public', 'data', 'subjects', selectedSubject.id);
       await setDoc(subjectDoc, {
@@ -161,7 +170,7 @@ const App = () => {
   };
 
   const deleteQuestion = async (qId) => {
-    if (!isAdmin || !user) return;
+    if (!isAdmin || !user || !selectedSubject) return;
     try {
       const subjectDoc = doc(db, 'artifacts', appId, 'public', 'data', 'subjects', selectedSubject.id);
       await setDoc(subjectDoc, {
@@ -200,7 +209,7 @@ const App = () => {
               <div className="bg-white/20 p-2 rounded-xl"><BookOpen size={24} /></div>
             )}
             <h1 className="text-xl font-bold truncate max-w-[180px]">
-              {selectedSubject ? selectedSubject.name : 'คลังคำตอบด่วน'}
+              {selectedSubject ? selectedSubject.name : 'คลังคำตอบ Real-time'}
             </h1>
           </div>
           <button 
@@ -217,7 +226,7 @@ const App = () => {
           {!selectedSubject ? (
             <motion.div key="list" initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 10 }} className="space-y-6">
               <div className="flex justify-between items-center">
-                <h2 className="text-xs font-bold uppercase tracking-widest text-slate-400">หมวดหมู่รายวิชา</h2>
+                <h2 className="text-xs font-bold uppercase tracking-widest text-slate-400">รายวิชาทั้งหมด</h2>
                 {isAdmin && (
                   <button onClick={() => setIsAddingSubject(true)} className="w-10 h-10 bg-indigo-600 text-white rounded-full flex items-center justify-center shadow-lg active:scale-90 transition-transform">
                     <Plus size={24} />
@@ -225,14 +234,14 @@ const App = () => {
                 )}
               </div>
               <div className="grid gap-4">
-                {subjects.length === 0 && <div className="text-center py-10 text-slate-400 italic">ยังไม่มีข้อมูลวิชา</div>}
+                {subjects.length === 0 && <div className="text-center py-10 text-slate-400 italic">เพิ่มวิชาแรกของคุณโดยกดปุ่ม +</div>}
                 {subjects.map((subject) => (
                   <div key={subject.id} onClick={() => setSelectedSubject(subject)} className="bg-white p-5 rounded-[1.5rem] shadow-sm border border-slate-100 flex justify-between items-center cursor-pointer active:scale-[0.98] transition-all hover:border-indigo-200">
                     <div className="flex items-center gap-4">
                       <div className="w-12 h-12 bg-indigo-50 rounded-2xl flex items-center justify-center text-indigo-600"><BookOpen size={24} /></div>
                       <div>
                         <h3 className="font-bold text-slate-800 text-lg">{subject.name}</h3>
-                        <p className="text-sm text-slate-500">{subject.questions?.length || 0} คำถาม</p>
+                        <p className="text-sm text-slate-500">{subject.questions?.length || 0} ข้อ</p>
                       </div>
                     </div>
                     {isAdmin && (
@@ -249,7 +258,7 @@ const App = () => {
               <div className="relative group shadow-sm rounded-[1.5rem]">
                 <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-indigo-500 transition-colors" size={20} />
                 <input 
-                  type="text" placeholder="ค้นหาคำถาม..." 
+                  type="text" placeholder="ค้นหาคำถามหรือคำตอบ..." 
                   className="w-full pl-12 pr-4 py-4 bg-white rounded-[1.5rem] border-none outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
                   value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
                 />
@@ -259,13 +268,13 @@ const App = () => {
                 <span className="text-sm font-bold text-slate-400 uppercase tracking-widest">รายการคำถาม</span>
                 {isAdmin && (
                   <button onClick={() => setIsAddingQuestion(true)} className="bg-indigo-600 text-white px-5 py-2.5 rounded-2xl shadow-lg flex items-center gap-2 font-bold active:scale-95 transition-transform">
-                    <Plus size={18} /> เพิ่มใหม่
+                    <Plus size={18} /> เพิ่มข้อสอบ
                   </button>
                 )}
               </div>
 
               <div className="space-y-4">
-                {filteredQuestions.length === 0 && <div className="text-center py-10 text-slate-300 italic">ไม่พบข้อมูลคำถาม</div>}
+                {filteredQuestions.length === 0 && <div className="text-center py-10 text-slate-300 italic">ไม่พบคำถาม</div>}
                 {filteredQuestions.map((q) => (
                   <div key={q.id} className="bg-white p-5 rounded-[1.5rem] shadow-sm border border-slate-50">
                     <div className="flex justify-between items-start mb-3">
@@ -281,7 +290,7 @@ const App = () => {
                     </div>
                     <div className="bg-[#F1F5F9] p-4 rounded-2xl border-l-4 border-indigo-500 space-y-3">
                       <p className="text-slate-600 text-sm leading-relaxed whitespace-pre-wrap">
-                        <span className="font-bold text-indigo-600 mr-2">คำตอบ:</span>
+                        <span className="font-bold text-indigo-600 mr-2">A:</span>
                         {q.answer}
                       </p>
                       {q.imageData && (
@@ -302,17 +311,17 @@ const App = () => {
       <AnimatePresence>
         {showAdminLogin && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-6">
-            <motion.div initial={{ scale: 0.9, y: 10 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.9, y: 10 }} className="bg-white w-full max-w-xs rounded-[2.5rem] p-8 shadow-2xl">
+            <motion.div initial={{ scale: 0.9, y: 10 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.9, y: 10 }} className="bg-white w-full max-w-xs rounded-[2.5rem] p-8 shadow-2xl text-center">
               <div className="flex justify-center mb-4 text-indigo-600"><Key size={40} /></div>
-              <h3 className="text-xl font-bold mb-6 text-center text-slate-800">Admin Login</h3>
+              <h3 className="text-xl font-bold mb-6 text-slate-800">เข้าสู่ระบบแอดมิน</h3>
               <input 
                 type="password" autoFocus 
                 className="w-full p-4 bg-slate-50 rounded-2xl mb-6 border-none outline-none focus:ring-2 focus:ring-indigo-500 text-center" 
-                placeholder="ใส่รหัสผ่าน..." 
+                placeholder="รหัสผ่าน..." 
                 value={adminInput} onChange={(e) => setAdminInput(e.target.value)} 
                 onKeyDown={(e) => e.key === 'Enter' && handleAdminLogin()}
               />
-              <button onClick={handleAdminLogin} className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-bold shadow-lg active:scale-95 transition-transform">ยืนยันรหัส</button>
+              <button onClick={handleAdminLogin} className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-bold shadow-lg active:scale-95 transition-transform">ยืนยัน</button>
               <button onClick={() => setShowAdminLogin(false)} className="w-full py-2 text-slate-400 font-bold mt-2 text-sm">ปิด</button>
             </motion.div>
           </motion.div>
@@ -323,21 +332,21 @@ const App = () => {
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 bg-slate-900/40 backdrop-blur-md z-50 flex items-end sm:items-center justify-center p-4">
             <motion.div initial={{ y: "100%" }} animate={{ y: 0 }} className="bg-white w-full max-w-md rounded-t-[2.5rem] sm:rounded-[2.5rem] p-8 shadow-2xl overflow-y-auto max-h-[90vh]">
               <div className="flex justify-between items-center mb-6">
-                <h3 className="text-xl font-bold text-slate-800">เพิ่มคำถามใหม่</h3>
+                <h3 className="text-xl font-bold text-slate-800">เพิ่มข้อสอบใหม่</h3>
                 <button onClick={() => setIsAddingQuestion(false)} className="p-2 bg-slate-50 rounded-full text-slate-400"><X size={20}/></button>
               </div>
               <div className="space-y-5">
                 <div>
-                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">คำถาม</label>
-                  <textarea className="w-full p-4 bg-slate-50 rounded-2xl mt-1 border-none outline-none focus:ring-2 focus:ring-indigo-500" rows="2" placeholder="พิมพ์คำถามที่นี่..." value={newQuestion.text} onChange={(e) => setNewQuestion({...newQuestion, text: e.target.value})}/>
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">โจทย์คำถาม</label>
+                  <textarea className="w-full p-4 bg-slate-50 rounded-2xl mt-1 border-none outline-none focus:ring-2 focus:ring-indigo-500" rows="2" placeholder="พิมพ์โจทย์..." value={newQuestion.text} onChange={(e) => setNewQuestion({...newQuestion, text: e.target.value})}/>
                 </div>
                 <div>
-                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">คำตอบ</label>
-                  <textarea className="w-full p-4 bg-indigo-50/40 rounded-2xl mt-1 border-none outline-none focus:ring-2 focus:ring-indigo-500" rows="3" placeholder="พิมพ์คำตอบที่นี่..." value={newQuestion.answer} onChange={(e) => setNewQuestion({...newQuestion, answer: e.target.value})}/>
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">คำตอบ / เฉลย</label>
+                  <textarea className="w-full p-4 bg-indigo-50/40 rounded-2xl mt-1 border-none outline-none focus:ring-2 focus:ring-indigo-500" rows="3" placeholder="พิมพ์คำตอบ..." value={newQuestion.answer} onChange={(e) => setNewQuestion({...newQuestion, answer: e.target.value})}/>
                 </div>
                 
                 <div>
-                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">รูปภาพประกอบ (ถ้ามี)</label>
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">แนบรูปภาพ (ถ้ามี)</label>
                   <div 
                     onClick={() => fileInputRef.current.click()}
                     className="w-full h-32 border-2 border-dashed border-slate-200 rounded-2xl mt-1 flex flex-col items-center justify-center cursor-pointer hover:bg-slate-50 transition-colors group relative overflow-hidden"
@@ -346,7 +355,7 @@ const App = () => {
                       <>
                         <img src={newQuestion.imageData} alt="Preview" className="w-full h-full object-cover" />
                         <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                          <p className="text-white text-xs font-bold">เปลี่ยนรูปภาพ</p>
+                          <p className="text-white text-xs font-bold">เปลี่ยนรูป</p>
                         </div>
                         <button 
                           onClick={(e) => { e.stopPropagation(); setNewQuestion({...newQuestion, imageData: ''}); }}
@@ -358,20 +367,14 @@ const App = () => {
                     ) : (
                       <>
                         <Upload size={24} className="text-slate-300 group-hover:text-indigo-500 transition-colors mb-2" />
-                        <p className="text-slate-400 text-xs">เลือกรูปภาพจากเครื่อง</p>
+                        <p className="text-slate-400 text-xs">คลิกเพื่ออัปโหลด</p>
                       </>
                     )}
                   </div>
-                  <input 
-                    type="file" 
-                    accept="image/*" 
-                    className="hidden" 
-                    ref={fileInputRef} 
-                    onChange={handleImageUpload} 
-                  />
+                  <input type="file" accept="image/*" className="hidden" ref={fileInputRef} onChange={handleImageUpload} />
                 </div>
 
-                <button onClick={addQuestion} className="w-full py-5 bg-indigo-600 text-white rounded-3xl font-bold text-lg shadow-xl shadow-indigo-100 mt-2 active:scale-[0.98] transition-all">บันทึกข้อมูล</button>
+                <button onClick={addQuestion} className="w-full py-5 bg-indigo-600 text-white rounded-3xl font-bold text-lg shadow-xl shadow-indigo-100 mt-2 active:scale-[0.98] transition-all">บันทึกลงฐานข้อมูล</button>
               </div>
             </motion.div>
           </motion.div>
@@ -380,10 +383,10 @@ const App = () => {
         {isAddingSubject && isAdmin && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 bg-slate-900/40 backdrop-blur-md z-50 flex items-center justify-center p-6">
             <motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }} className="bg-white w-full max-w-xs rounded-[2.5rem] p-8 shadow-2xl">
-              <h3 className="text-xl font-bold mb-6 text-center text-slate-800 uppercase tracking-wider">เพิ่มวิชาใหม่</h3>
-              <input className="w-full p-4 bg-slate-50 rounded-2xl mb-6 border-none outline-none focus:ring-2 focus:ring-indigo-500 text-center" placeholder="ชื่อวิชา..." value={newSubjectName} onChange={(e) => setNewSubjectName(e.target.value)}/>
+              <h3 className="text-xl font-bold mb-6 text-center text-slate-800">สร้างรายวิชาใหม่</h3>
+              <input className="w-full p-4 bg-slate-50 rounded-2xl mb-6 border-none outline-none focus:ring-2 focus:ring-indigo-500 text-center" placeholder="เช่น ภาษาอังกฤษ..." value={newSubjectName} onChange={(e) => setNewSubjectName(e.target.value)}/>
               <div className="flex flex-col gap-2">
-                <button onClick={addSubject} className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-bold shadow-lg active:scale-95 transition-transform">บันทึก</button>
+                <button onClick={addSubject} className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-bold shadow-lg active:scale-95 transition-transform">ตกลง</button>
                 <button onClick={() => setIsAddingSubject(false)} className="py-2 text-slate-400 font-bold text-sm">ยกเลิก</button>
               </div>
             </motion.div>
@@ -391,10 +394,10 @@ const App = () => {
         )}
       </AnimatePresence>
 
-      {/* Mode Indicator */}
+      {/* Admin Badge */}
       <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-30 pointer-events-none">
         <div className={`px-4 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-widest border shadow-lg backdrop-blur-sm ${isAdmin ? 'bg-amber-100/90 border-amber-300 text-amber-700' : 'bg-white/90 border-slate-200 text-slate-400'}`}>
-          {isAdmin ? 'ADMIN MODE ACTIVE (แก้ไขได้)' : 'VIEWER MODE (เพื่อนดูได้อย่างเดียว)'}
+          {isAdmin ? 'ADMIN MODE - ข้อมูลอัปเดต Real-time' : 'VIEWER MODE - ระบบอัปเดตอัตโนมัติ'}
         </div>
       </div>
     </div>
